@@ -89,7 +89,7 @@ class Model001(Iterator):
             indicateds = indicated.nonzero()[0]
             if not (len(susceptibles) and len(indicateds)):
                 return []
-            flip = len(susceptibles) > len(indicateds)
+            flip = len(susceptibles) < len(indicateds)
             if not flip:
                 ids1, ids2 = susceptibles, indicateds
             else:
