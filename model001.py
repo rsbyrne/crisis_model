@@ -22,12 +22,14 @@ class Model001(Iterator):
             aspect = 1.2,
             scale = 22.,
             corner = [0., 0.],
+            timescale = 1., # days per timestep
             popDensity = 508,
             initialIndicated = 1,
             directionChange = 0.5,
             travelLength = 0.5,
             infectionChance = 0.1,
-            recoverChance = 0.1,
+            recoverMean = 14, # days
+            recoverSpread = 2, # standard deviations
             contactLength = 0.01,
             spatialDecimals = None,
             seed = 1066,
@@ -44,6 +46,9 @@ class Model001(Iterator):
         def choice(*args, **kwargs):
             rngCount.value += 1
             return rng.choice(*args, **kwargs)
+        def normal(*args, **kwargs):
+            rngCount.value += 1
+            return rng.normal(*args, **kwargs)
 
         minCoords = np.array(corner)
         maxCoords = np.array([aspect, 1.]) * scale
@@ -57,6 +62,7 @@ class Model001(Iterator):
         distances = np.empty(shape = nAgents, dtype = float)
 
         indicated = np.empty(nAgents, dtype = bool)
+        timeIndicated = np.zeros(nAgents, dtype = float)
         recovered = np.empty(nAgents, dtype = bool)
         susceptible = np.empty(nAgents, dtype = bool)
 
@@ -134,10 +140,16 @@ class Model001(Iterator):
             else:
                 newIndicateds = []
             indicateds = indicated.nonzero()[0]
-            recovery = random(len(indicateds)) < recoverChance
+            recovery = normal(
+                recoverMean,
+                recoverSpread,
+                len(indicateds)
+                ) < timeIndicated[indicated]
+#             recovery = random(len(indicateds)) < recoverChance
             indicated[indicateds] = ~recovery
             recovered[indicateds] = recovery
             susceptible[newIndicateds] = False
+            timeIndicated[indicated] += timescale
 
         def out():
             return [agentCoords.copy(), indicated.copy(), recovered.copy(), rngCount.value]
