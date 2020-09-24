@@ -18,43 +18,34 @@ class EndModel(Exception):
 
 class Model001(Iterator):
 
+    class local:
+        pass
+
     def __init__(self,
-            aspect = 1.2,
-            scale = 22.,
-            corner = [0., 0.],
+            aspect = 1.2, # x length relative to y length
+            scale = 22., # y length in km
+            corner = [0., 0.], # coords of bottom-left corner
             timescale = 1., # days per timestep
-            popDensity = 508,
-            initialIndicated = 1,
-            directionChange = 0.5,
-            travelLength = 0.5,
-            infectionChance = 0.1,
-            recoverMean = 14, # days
-            recoverSpread = 2, # standard deviations
-            contactLength = 0.01,
-            spatialDecimals = None,
-            seed = 1066,
+            popDensity = 508, # people per sq km
+            initialIndicated = 1, # initial mystery cases
+            directionChange = 0.5, # where 1 == 180 deg
+            speed = 5, # agent travel speed in km / h
+            infectionChance = 0.1, # chance of transmission by 'contact'
+            recoverMean = 14, # average recovery time in days
+            recoverSpread = 2, # standard deviations of recovery curve
+            contactLength = 1.5, # proximity in metres that qualifies as 'contact'
+            spatialDecimals = None, # spatial precision limit
+            seed = 1066, # random seed
             ):
 
-        nAgents = int(scale ** 2 * aspect * popDensity)
+        self.locals = Grouper({})
 
-        rng = np.random.default_rng(seed)
-        rngInitState = rng.__getstate__()
-        rngCount = Value(0)
-        def random(*args, **kwargs):
-            rngCount.value += 1
-            return rng.random(*args, **kwargs)
-        def choice(*args, **kwargs):
-            rngCount.value += 1
-            return rng.choice(*args, **kwargs)
-        def normal(*args, **kwargs):
-            rngCount.value += 1
-            return rng.normal(*args, **kwargs)
+        nAgents = int(scale ** 2 * aspect * popDensity)
+        travelLength = speed * timescale * 24.
 
         minCoords = np.array(corner)
         maxCoords = np.array([aspect, 1.]) * scale
         domainLengths = maxCoords - minCoords
-
-        allIndices = np.arange(nAgents)
 
         agentCoords = np.empty(shape = (nAgents, 2), dtype = float)
 
@@ -67,8 +58,9 @@ class Model001(Iterator):
         susceptible = np.empty(nAgents, dtype = bool)
 
         def update_coords():
-            distances[...] = random(nAgents) * travelLength
-            headings[...] = headings + (random(nAgents) - 0.5) * 2. * np.pi * directionChange
+            rng = self.locals.rng
+            distances[...] = rng.random(nAgents) * travelLength
+            headings[...] += (rng.random(nAgents) - 0.5) * 2. * np.pi * directionChange * timescale
             displacements = np.stack([
                 np.cos(headings),
                 np.sin(headings)
@@ -105,7 +97,7 @@ class Model001(Iterator):
             contacts = strategy(
                 adjCoords[ids1],
                 adjCoords[ids2],
-                contactLength,
+                contactLength / 1000.,
                 maxCoords - minCoords,
                 )
             encounters = np.array([
@@ -117,49 +109,50 @@ class Model001(Iterator):
                 encounters = encounters[:, slice(None, None, -1)]
             return encounters
 
+        def get_stepSeed():
+            stepSeed = int(np.random.default_rng(int(seed + self.count.value)).integers(0, int(1e9)))
+            print(seed, self.count.value, stepSeed, type(stepSeed))
+            return stepSeed
+
         def initialise():
-            rng.__setstate__(rngInitState)
-            agentCoords[...] = random((nAgents, 2)) * (maxCoords - minCoords) + corner
-            headings[...] = random(nAgents) * 2. * np.pi
+            rng = self.locals.rng = np.random.default_rng(get_stepSeed())
+            agentCoords[...] = rng.random((nAgents, 2)) * (maxCoords - minCoords) + corner
+            headings[...] = rng.random(nAgents) * 2. * np.pi
             indicated[...] = False
-            indicated[choice(allIndices, initialIndicated)] = True
+            indicated[rng.choice(np.arange(nAgents), initialIndicated)] = True
             recovered[...] = False
             susceptible[...] = ~indicated
 
         def iterate():
+            rng = self.locals.rng = np.random.default_rng(get_stepSeed())
             if not len(indicated.nonzero()[0]):
                 raise EndModel
             update_coords()
             encounters = get_encounters()
             if len(encounters):
                 newIndicateds = np.unique(
-                    encounters[random(encounters.shape[0])
-                        < infectionChance][:, 1]
+                    encounters[rng.random(encounters.shape[0]) < infectionChance][:, 1]
                     )
                 indicated[newIndicateds] = True
             else:
                 newIndicateds = []
             indicateds = indicated.nonzero()[0]
-            recovery = normal(
+            recovery = rng.normal(
                 recoverMean,
                 recoverSpread,
-                len(indicateds)
+                len(indicateds),
                 ) < timeIndicated[indicated]
-#             recovery = random(len(indicateds)) < recoverChance
             indicated[indicateds] = ~recovery
             recovered[indicateds] = recovery
             susceptible[newIndicateds] = False
             timeIndicated[indicated] += timescale
 
         def out():
-            return [agentCoords.copy(), indicated.copy(), recovered.copy(), rngCount.value]
+            return [agentCoords.copy(), indicated.copy(), recovered.copy()]
 
-        outkeys = ['agentCoords', 'indicated', 'recovered', 'rngCount']
+        outkeys = ['agentCoords', 'indicated', 'recovered']
 
         def load(loadDict):
-            rng.__setstate__(rngInitState)
-            rngCount.value = loadDict['rngCount']
-            ignoreMe = [rng.random() for i in range(rngCount.value)]
             agentCoords[...] = loadDict['agentCoords']
             indicated[...] = loadDict['indicated']
 
@@ -172,7 +165,7 @@ class Model001(Iterator):
         super().__init__()
 
         self.step = self.count
-        self.locals = Grouper(locals())
+        self.locals.__dict__.update(locals())
 
     def show(self):
 
@@ -269,5 +262,18 @@ def accelerated_neighbours_radius_array(
         )
     contacts = kdtree.query_ball_point(targets, radius)
     return [np.array(row, dtype = int) for row in contacts]
+
+# def rand_wrap(func, rngCount):
+#     def wrapper(size, *args, **kwargs):
+#         if size is None:
+#             rngCount.value += 1
+#         else:
+#             if type(size) is int:
+#                 flatSize = size
+#             else:
+#                 flatSize = np.array(size).prod()
+#             rngCount.value += flatSize
+#         return func(*args, size = size, **kwargs)
+#     return wrapper
 
 CLASS = Model001
