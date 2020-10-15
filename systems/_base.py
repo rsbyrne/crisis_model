@@ -1,5 +1,6 @@
 from functools import wraps
 import numpy as np
+from collections import OrderedDict
 
 from window.plot import Canvas, Data
 
@@ -9,14 +10,21 @@ from everest.builts._observable import Observable
 from everest.utilities import Grouper
 from everest.builts._voyager import _voyager_initialise_if_necessary
 
-from .array import swarm_split
+from ..exceptions import *
+
+class SystemException(CrisisModelException):
+    pass
+class SystemMissingAsset(CrisisModelMissingAsset, SystemException):
+    pass
+
+from ..array import swarm_split
 
 colourCodes = dict(zip(
     ['red', 'blue', 'green', 'purple', 'orange', 'yellow', 'brown', 'pink', 'grey'],
     [1. / 18. + i * 1. / 9 for i in range(0, 9)],
     ))
 
-class ModelVar(StateVar):
+class SystemVar(StateVar):
     def __init__(self, target, *props):
         super().__init__(target, *props)
         self.params = target.inputs
@@ -38,29 +46,58 @@ def _constructed(func):
         return func(self, *args, **kwargs)
     return wrapper
 
-class OverModel(Observable, Chroner, Wanderer):
+class System(Observable, Chroner, Wanderer):
+
+    reqAtts = {
+        'initialise',
+        'iterate',
+        '_update',
+        'nAgents',
+        'minCoords',
+        'maxCoords',
+        'susceptible',
+        }
+    configsKeys = (
+        'agentCoords',
+        'indicated',
+        'recovered',
+        'timeIndicated',
+        )
+    reqAtts.update(configsKeys)
 
     def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+        if not set(self._sortedGhostKeys['configs']) == set(self.configsKeys):
+            raise SystemMissingAsset
+        super().__init__(
+            **kwargs
+            )
         self._figUpToDate = False
 
     def construct(self):
-        self.locals = Grouper(self._construct(p = self.inputs))
-        del self.locals['p']
+        localObj = Grouper(self._construct(p = self.inputs))
+        del localObj['p']
+        self._construct_check(localObj)
+        self.locals = localObj
         for k in self.configs.keys():
-            self.mutables[k] = ModelVar(self, 'locals', k)
+            self.mutables[k] = SystemVar(self, 'locals', k)
         self.observables.clear()
         self.observables.update(self.locals)
         self._fig = self._make_fig()
+    @classmethod
+    def _construct_check(cls, obj):
+        if not all(hasattr(obj, att) for att in cls.reqAtts):
+            raise SystemMissingAsset
 
     @_constructed
     def _initialise(self):
         super()._initialise()
         self.locals.initialise()
+    @_voyager_initialise_if_necessary(post = True)
     def _iterate(self):
         self.locals.iterate()
         super()._iterate()
     @_constructed
+    @_voyager_initialise_if_necessary(post = True)
     def _out(self):
         outs = super()._out()
         for k, v in self.mutables.items():
@@ -119,9 +156,8 @@ class OverModel(Observable, Chroner, Wanderer):
         collection.autoscale()
         return canvas
     @property
+    @_voyager_initialise_if_necessary(post = True)
     def fig(self):
-        if self._indexers_isnull:
-            raise Exception("Nothing to show yet.")
         if not self._figUpToDate:
             self._update_fig()
         return self._fig

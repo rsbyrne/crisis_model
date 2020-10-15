@@ -4,13 +4,13 @@ from scipy import spatial
 from collections import OrderedDict
 import warnings
 
-from crisis_model.overmodel import OverModel
+from crisis_model.systems import System
 from crisis_model.array import *
 
 class EndModel(Exception):
     pass
 
-class Model(OverModel):
+class Covid1(System):
 
     def __init__(self,
             aspect = 1.2, # x length relative to y length
@@ -158,4 +158,4 @@ class Model(OverModel):
 
         return locals()
 
-CLASS = Model
+CLASS = Covid1
