@@ -2,23 +2,15 @@ import numpy as np
 from functools import partial
 from scipy import spatial
 from collections import OrderedDict
+import warnings
 
-from everest.builts._voyager import Voyager
-from everest.builts._chroner import Chroner
-from everest.value import Value
-from everest.utilities import Grouper
-
-from window.plot import Canvas, Data
-
-colourCodes = dict(zip(
-    ['red', 'blue', 'green', 'purple', 'orange', 'yellow', 'brown', 'pink', 'grey'],
-    [1. / 18. + i * 1. / 9 for i in range(0, 9)],
-    ))
+from .overmodel import OverModel
+from .array import *
 
 class EndModel(Exception):
     pass
 
-class Model(Voyager, Chroner):
+class Model(OverModel):
 
     def __init__(self,
             aspect = 1.2, # x length relative to y length
@@ -32,19 +24,26 @@ class Model(Voyager, Chroner):
             infectionChance = 0.1, # chance of transmission by 'contact'
             recoverMean = 14, # average recovery time in days
             recoverSpread = 2, # standard deviations of recovery curve
-            contactLength = 1.5, # proximity in metres that qualifies as 'contact'
+            contactLength = 1.5, # proximity in metres defining 'contact'
             spatialDecimals = None, # spatial precision limit
             seed = 1066, # random seed
+            # CONFIGS (_ghost_)
+            agentCoords = None,
+            indicated = False,
+            recovered = False,
+            timeIndicated = 0.,
             ):
 
-        self.locals = Grouper({})
+        super().__init__()
 
-        nAgents = int(scale ** 2 * aspect * popDensity)
-        travelLength = speed * timescale * 24.
+    def _construct(self, p):
 
-        minCoords = np.array(corner)
-        maxCoords = np.array([aspect, 1.]) * scale
-        domainLengths = maxCoords - minCoords
+        nAgents = int(p.scale ** 2 * p.aspect * p.popDensity)
+        travelLength = p.speed * p.timescale * 24.
+
+        minCoords, maxCoords, domainLengths = get_coordInfo(
+            p.corner, p.aspect, p.scale
+            )
 
         agentCoords = np.empty(shape = (nAgents, 2), dtype = float)
 
@@ -59,27 +58,12 @@ class Model(Voyager, Chroner):
         def update_coords():
             rng = self.locals.rng
             distances[...] = rng.random(nAgents) * travelLength
-            headings[...] += (rng.random(nAgents) - 0.5) * 2. * np.pi * directionChange * timescale
-            displacements = np.stack([
-                np.cos(headings),
-                np.sin(headings)
-                ], axis = -1
-                ) * distances[:, None]
-            agentCoords[...] = agentCoords + displacements % domainLengths
-            agentCoords[...] = np.where(
-                agentCoords < minCoords,
-                maxCoords - agentCoords,
-                agentCoords
-                )
-            agentCoords[...] = np.where(
-                agentCoords > maxCoords,
-                minCoords + agentCoords - maxCoords,
-                agentCoords
-                )
-            if not spatialDecimals is None:
-                agentCoords[...] = np.round(agentCoords, spatialDecimals)
-                if spatialDecimals == 0:
-                    agentCoords[...] = agentCoords.astype(int)
+            ang = p.directionChange * p.timescale
+            headings[...] += (rng.random(nAgents) - 0.5) * 2. * np.pi * ang
+            wrap = minCoords, maxCoords
+            displace_coords(agentCoords, distances, headings, wrap)
+            if not p.spatialDecimals is None:
+                round_coords(agentCoords, p.spatialDecimals)
 
         def get_encounters():
             susceptibles = susceptible.nonzero()[0]
@@ -92,11 +76,14 @@ class Model(Voyager, Chroner):
             else:
                 ids1, ids2 = indicateds, susceptibles
             adjCoords = agentCoords - minCoords
-            strategy = partial(accelerated_neighbours_radius_array, leafsize = 128)
+            strategy = partial(
+                accelerated_neighbours_radius_array,
+                leafsize = 128
+                )
             contacts = strategy(
                 adjCoords[ids1],
                 adjCoords[ids2],
-                contactLength / 1000.,
+                p.contactLength / 1000.,
                 maxCoords - minCoords,
                 )
             encounters = np.array([
@@ -109,18 +96,33 @@ class Model(Voyager, Chroner):
             return encounters
 
         def get_stepSeed():
-            stepSeed = int(np.random.default_rng(int(seed + self.count.value)).integers(0, int(1e9)))
+            stepSeed = int(
+                np.random.default_rng(
+                    int(p.seed + self.count.value)
+                    ).integers(0, int(1e9))
+                )
             # print(seed, self.count.value, stepSeed, type(stepSeed))
             return stepSeed
 
         def initialise():
             rng = self.locals.rng = np.random.default_rng(get_stepSeed())
-            agentCoords[...] = rng.random((nAgents, 2)) * (maxCoords - minCoords) + corner
+            if not np.all(agentCoords < np.inf):
+                warnings.warn(
+                    "Setting agent coords randomly - did you expect this?"
+                    )
+                agentCoords[...] = \
+                    rng.random((nAgents, 2)) \
+                    * (maxCoords - minCoords) \
+                    + p.corner
             headings[...] = rng.random(nAgents) * 2. * np.pi
-            indicated[...] = False
-            indicated[rng.choice(np.arange(nAgents), initialIndicated)] = True
-            recovered[...] = False
-            susceptible[...] = ~indicated
+            susceptible[...] = True
+            susceptible[indicated] = False
+            susceptible[recovered] = False
+            nonSusceptible = susceptible.nonzero()[0]
+            nNew = min(len(nonSusceptible), p.initialIndicated)
+            newCases = rng.choice(nonSusceptible, nNew)
+            indicated[newCases] = True
+            susceptible[newCases] = False
 
         def iterate():
             rng = self.locals.rng = np.random.default_rng(get_stepSeed())
@@ -130,168 +132,30 @@ class Model(Voyager, Chroner):
             encounters = get_encounters()
             if len(encounters):
                 newIndicateds = np.unique(
-                    encounters[rng.random(encounters.shape[0]) < infectionChance][:, 1]
+                    encounters[
+                        rng.random(encounters.shape[0]) < p.infectionChance
+                        ][:, 1]
                     )
                 indicated[newIndicateds] = True
             else:
                 newIndicateds = []
             indicateds = indicated.nonzero()[0]
             recovery = rng.normal(
-                recoverMean,
-                recoverSpread,
+                p.recoverMean,
+                p.recoverSpread,
                 len(indicateds),
                 ) < timeIndicated[indicated]
             indicated[indicateds] = ~recovery
             recovered[indicateds] = recovery
             susceptible[newIndicateds] = False
-            timeIndicated[indicated] += timescale
-            self.indices.chron.value += timescale
+            timeIndicated[indicated] += p.timescale
+            self.indices.chron.value += p.timescale
 
-        def out():
-            keys = ['agentCoords', 'indicated', 'recovered']
-            vals = [agentCoords.copy(), indicated.copy(), recovered.copy()]
-            return OrderedDict(zip(keys, vals))
+        def _update():
+            susceptible[...] = True
+            susceptible[indicated] = False
+            susceptible[recovered] = False
 
-        def load_process(outs):
-            agentCoords[...] = outs.pop('agentCoords')
-            indicated[...] = outs.pop('indicated')
-            recovered[...] = outs.pop('recovered')
-            return outs
-
-        self.locals.update(locals())
-
-        super().__init__()
-
-    def _initialise(self):
-        super()._initialise()
-        self.locals.initialise()
-    def _iterate(self):
-        self.locals.iterate()
-        super()._iterate()
-    def _out(self):
-        outs = super()._out()
-        add = self.locals.out()
-        outs.update(add)
-        return outs
-    def _load_process(self, outs):
-        outs = super()._load_process(outs)
-        outs = self.locals.load_process(outs)
-        return outs
-
-    @property
-    def count(self):
-        return self.indices.count
-    @property
-    def chron(self):
-        return self.indices.chron
-
-    def show(self):
-
-        global colourCodes
-
-        aspect = self.locals.aspect
-        minCoords = self.locals.minCoords
-        maxCoords = self.locals.maxCoords
-        coords = self.locals.agentCoords
-        indicated = self.locals.indicated
-        recovered = self.locals.recovered
-        susceptible = self.locals.susceptible
-        nMarkers = self.locals.nAgents
-        step = self.count
-
-        if not hasattr(self, 'fig'):
-
-            figScale = int(np.log10(nMarkers)) + 3
-
-            xs, ys = coords.transpose()
-
-            cs = np.random.rand(nMarkers)
-
-            figsize = (int(figScale * aspect), figScale)
-            canvas = Canvas(size = figsize)
-            ax = canvas.make_ax()
-            ax.scatter(
-                Data(
-                    xs,
-                    lims = (minCoords[0], maxCoords[0]),
-                    capped = (True, True),
-                    label = 'x km',
-                    ),
-                Data(
-                    ys,
-                    lims = (minCoords[1], maxCoords[1]),
-                    capped = (True, True),
-                    label = 'y km'
-                    ),
-                cs,
-                )
-            ax.ax.set_facecolor('black')
-
-#             ax.toggle_tickLabels_x()
-#             ax.toggle_tickLabels_y()
-#             ax.toggle_label_x()
-#             ax.toggle_label_y()
-
-            collection = ax.collections[0]
-            collection.set_alpha(1.)
-            collection.set_cmap('Set1')
-            collection.autoscale()
-
-            self.fig = canvas
-
-        figScale = self.fig.size[1]
-
-        cs = np.zeros(nMarkers)
-        cs[...] = colourCodes['grey']
-        cs[susceptible] = colourCodes['blue']
-        cs[indicated] = colourCodes['red']
-        cs[recovered] = colourCodes['yellow']
-
-        nSqPoints = figScale ** 2 * aspect * 72 ** 2
-        s = nSqPoints / nMarkers * 0.1
-        ss = np.full(nMarkers, s)
-        ss[indicated] *= 4
-
-        canvas = self.fig
-        ax = canvas.axes[0][0][0]
-
-        collection = ax.collections[0]
-        collection.set_offsets(np.concatenate([coords[~indicated], coords[indicated]]))
-        collection.set_array(np.concatenate([cs[~indicated], cs[indicated]]))
-        collection.set_sizes(np.concatenate([ss[~indicated], ss[indicated]]))
-
-        ax.set_title(f'Step: {str(step)}')
-
-        return canvas.fig
-
-def accelerated_neighbours_radius_array(
-        coords,
-        targets,
-        radius,
-        domainLengths,
-        leafsize = 128,
-        ):
-    kdtree = spatial.cKDTree(
-        coords,
-        compact_nodes = True,
-        balanced_tree = True,
-        leafsize = leafsize,
-        boxsize = domainLengths + 1e-9,
-        )
-    contacts = kdtree.query_ball_point(targets, radius)
-    return [np.array(row, dtype = int) for row in contacts]
+        return locals()
 
 CLASS = Model
-
-# def rand_wrap(func, rngCount):
-#     def wrapper(size, *args, **kwargs):
-#         if size is None:
-#             rngCount.value += 1
-#         else:
-#             if type(size) is int:
-#                 flatSize = size
-#             else:
-#                 flatSize = np.array(size).prod()
-#             rngCount.value += flatSize
-#         return func(*args, size = size, **kwargs)
-#     return wrapper
