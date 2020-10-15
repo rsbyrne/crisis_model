@@ -120,7 +120,7 @@ class Model(OverModel):
             susceptible[recovered] = False
             nonSusceptible = susceptible.nonzero()[0]
             nNew = min(len(nonSusceptible), p.initialIndicated)
-            newCases = rng.choice(nonSusceptible, nNew)
+            newCases = rng.choice(nonSusceptible, nNew, replace = False)
             indicated[newCases] = True
             susceptible[newCases] = False
 
