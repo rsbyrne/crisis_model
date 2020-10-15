@@ -4,8 +4,8 @@ from scipy import spatial
 from collections import OrderedDict
 import warnings
 
-from .overmodel import OverModel
-from .array import *
+from crisis_model.overmodel import OverModel
+from crisis_model.array import *
 
 class EndModel(Exception):
     pass
@@ -19,7 +19,7 @@ class Model(OverModel):
             timescale = 1., # days per timestep
             popDensity = 508, # people per sq km
             initialIndicated = 1, # initial mystery cases
-            directionChange = 0.5, # where 1 == 180 deg
+            directionChange = 0.5, # where 1 == 180 deg per day
             speed = 5, # agent travel speed in km / h
             infectionChance = 0.1, # chance of transmission by 'contact'
             recoverMean = 14, # average recovery time in days
