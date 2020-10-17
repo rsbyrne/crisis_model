@@ -6,6 +6,7 @@ import warnings
 
 from crisis_model.systems import System
 from crisis_model.array import *
+from crisis_model.observers import Epidemiology1
 
 class EndModel(Exception):
     pass
@@ -35,6 +36,8 @@ class Covid1(System):
             ):
 
         super().__init__()
+
+        self.observerClasses.append(Epidemiology1)
 
     def _construct(self, p):
 
