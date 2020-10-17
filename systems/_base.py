@@ -6,7 +6,7 @@ from window.plot import Canvas, Data
 
 from everest.builts._wanderer import Wanderer, StateVar
 from everest.builts._chroner import Chroner
-from everest.builts._observable import Observable
+from everest.builts._observable import Observable, _observation_mode
 from everest.utilities import Grouper
 from everest.builts._voyager import _voyager_initialise_if_necessary
 
@@ -100,9 +100,10 @@ class System(Observable, Chroner, Wanderer):
     @_voyager_initialise_if_necessary(post = True)
     def _out(self):
         outs = super()._out()
-        for k, v in self.mutables.items():
-            outs[k] = v.data.copy()
+        outs.update(self.evaluate())
         return outs
+    def _evaluate(self):
+        return OrderedDict((k, v.data.copy()) for k, v in self.mutables.items())
     @_constructed
     def _load_process(self, outs):
         outs = super()._load_process(outs)

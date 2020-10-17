@@ -1,6 +1,7 @@
+from collections import OrderedDict
+
 from everest.builts._observer import Observer
 from everest.utilities import Grouper
-from everest.quantity import Quantity
 
 from ..exceptions import *
 
@@ -19,8 +20,8 @@ class CrisisObserver(Observer):
         constructed = self._construct(subject.observables, inputs)
         if not 'analysers' in constructed:
             raise ObserverMissingAsset
-        if not all(isinstance(an, Analyser) for an in constructed['analysers']):
-            raise TypeError
+        # if not all(isinstance(an, Analyser) for an in constructed['analysers']):
+        #     raise TypeError
         def evaluate():
             return OrderedDict(
                 (k, an.evaluate())
@@ -33,13 +34,13 @@ class CrisisObserver(Observer):
     def _construct(self, observables, inputs):
         raise ObserverMissingAsset
 
-class AnalyserException(ObserverException):
-    pass
-class AnalyserMissingAsset(CrisisModelMissingAsset, AnalyserException):
-    pass
-
-class Analyser(Quantity):
-    def __init__(self):
-        super().__init__()
-    def evaluate(self):
-        raise AnalyserMissingAsset
+# class AnalyserException(ObserverException):
+#     pass
+# class AnalyserMissingAsset(CrisisModelMissingAsset, AnalyserException):
+#     pass
+#
+# class Analyser(Function):
+#     def __init__(self):
+#         super().__init__()
+#     def evaluate(self):
+#         raise AnalyserMissingAsset

@@ -2,7 +2,9 @@ from collections import OrderedDict
 
 import numpy as np
 
-from crisis_model.observers import CrisisObserver, Analyser
+from everest import Function as Fn
+
+from crisis_model.observers import CrisisObserver
 
 class Epidemiology1(CrisisObserver):
 
@@ -12,27 +14,15 @@ class Epidemiology1(CrisisObserver):
         super().__init__(**kwargs)
 
     @staticmethod
-    def _construct(s, i):
+    def _construct(o, i):
 
-        active = NonZero(s.indicated)
-        recovered = NonZero(s.recovered)
-        cumulative =
+        active = Fn(Fn(o, 'indicated'), op = (np.nonzero, Fn(None, 0), len))
+        recovered = Fn(Fn(o, 'recovered'), op = (np.nonzero, Fn(None, 0), len))
+        cumulative = active + recovered
+
+        analysers = OrderedDict()
+        analysers['active'] = active
+        analysers['recovered'] = recovered
+        analysers['cumulative'] = cumulative
 
         return locals()
-
-class NonZero(Analyser):
-    def __init__(self, arr, inv = False):
-        self.arr = arr
-        self.inv = inv
-        super().__init__()
-    def evaluate(self):
-        out = len(self.arr.nonzero())
-        if self.inv:
-            out = not out
-        return out
-
-        susceptible = s.susceptible
-        indicated = s.indicated
-        recovered = s.recovered
-        population = observables.nAgents
-        agentIDs = np.arange(population)
