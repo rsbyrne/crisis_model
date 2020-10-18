@@ -20,8 +20,6 @@ class CrisisObserver(Observer):
         constructed = self._construct(subject.observables, inputs)
         if not 'analysers' in constructed:
             raise ObserverMissingAsset
-        # if not all(isinstance(an, Analyser) for an in constructed['analysers']):
-        #     raise TypeError
         def evaluate():
             return OrderedDict(
                 (k, an.evaluate())
@@ -33,14 +31,3 @@ class CrisisObserver(Observer):
 
     def _construct(self, observables, inputs):
         raise ObserverMissingAsset
-
-# class AnalyserException(ObserverException):
-#     pass
-# class AnalyserMissingAsset(CrisisModelMissingAsset, AnalyserException):
-#     pass
-#
-# class Analyser(Function):
-#     def __init__(self):
-#         super().__init__()
-#     def evaluate(self):
-#         raise AnalyserMissingAsset
