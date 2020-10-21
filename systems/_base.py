@@ -83,7 +83,6 @@ class System(Observable, Chroner, Wanderer):
             ]
         self.observables.clear()
         self.observables.update(self.locals)
-        self._fig = self._make_fig()
     @classmethod
     def _construct_check(cls, obj):
         if not all(hasattr(obj, att) for att in cls.reqAtts):
@@ -122,11 +121,14 @@ class System(Observable, Chroner, Wanderer):
         self.update()
 
     def _make_fig(self):
-        nMarkers = self.locals.nAgents
-        figScale = int(np.log10(nMarkers)) + 3
         xs, ys = self.locals.agentCoords.transpose()
+        nMarkers = self.locals.nAgents
         cs = np.random.rand(nMarkers)
-        figsize = (int(figScale * self.inputs.aspect), figScale)
+        hypot = max(7, self.inputs.scale)
+        aspect = self.inputs.aspect
+        vert = hypot / np.sqrt((aspect ** 2 + 1))
+        width = vert * aspect
+        figsize = (round(width, 1), round(vert, 1))
         canvas = Canvas(size = figsize)
         ax = canvas.make_ax()
         ax.scatter(
@@ -153,6 +155,8 @@ class System(Observable, Chroner, Wanderer):
     @property
     @_voyager_initialise_if_necessary(post = True)
     def fig(self):
+        if not hasattr(self, '_fig'):
+            self._fig = self._make_fig()
         if not self._figUpToDate:
             self._update_fig()
         return self._fig
@@ -164,14 +168,14 @@ class System(Observable, Chroner, Wanderer):
         recovered = self.locals.recovered
         coords = self.locals.agentCoords
         nMarkers = self.locals.nAgents
-        figScale = self._fig.size[1]
+        figarea = self._fig.size[1] ** 2 * self.inputs.aspect
         cs = np.zeros(nMarkers)
         cs[...] = colourCodes['grey']
         cs[susceptible] = colourCodes['blue']
         cs[indicated] = colourCodes['red']
         cs[recovered] = colourCodes['yellow']
-        nSqPoints = figScale ** 2 * self.inputs.aspect * 72 ** 2
-        s = nSqPoints / nMarkers * 0.1
+        figareaPoints = figarea * 72 ** 2
+        s = figareaPoints / nMarkers * 0.1
         ss = np.full(nMarkers, s)
         ss[indicated] *= 4
         canvas = self._fig
