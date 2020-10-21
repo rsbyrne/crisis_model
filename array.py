@@ -95,11 +95,14 @@ def swarm_split(
     oldPop = len(arr)
     addPop = newPop - oldPop
     subtract = addPop < 0
-    rng = np.random.default_rng(int(oldPop + newPop))
-    try:
-        indices = rng.choice(np.arange(oldPop), abs(addPop), replace = False)
-    except ValueError:
-        indices = rng.choice(np.arange(oldPop), abs(addPop), replace = True)
+    rng = np.random.default_rng(newPop)
+    reps, rem = np.divmod(addPop, oldPop)
+    allIndices = np.arange(oldPop)
+    indices = np.concatenate([
+        *[allIndices for rep in range(reps)],
+        rng.choice(allIndices, rem, replace = False)
+        ]) # selects all indices before repeating.
+    assert len(indices) == addPop, (addPop, indices)
     if len(arr.shape) == 1 or subtract:
         return resize_arr(arr, indices, subtract)
     else:
