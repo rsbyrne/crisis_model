@@ -105,7 +105,7 @@ def swarm_split(
     else:
         arr = random_split_coords(
             arr,
-            0.5 * np.sqrt(area / oldPop),
+            0.5 * np.sqrt(area / newPop),
             rng,
             wrap = newInfo[:2],
             indices = indices,
