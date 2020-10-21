@@ -96,7 +96,10 @@ def swarm_split(
     addPop = newPop - oldPop
     subtract = addPop < 0
     rng = np.random.default_rng(int(oldPop + newPop))
-    indices = rng.choice(np.arange(oldPop), abs(addPop), replace = False)
+    try:
+        indices = rng.choice(np.arange(oldPop), abs(addPop), replace = False)
+    except ValueError:
+        indices = rng.choice(np.arange(oldPop), abs(addPop), replace = True)
     if len(arr.shape) == 1 or subtract:
         return resize_arr(arr, indices, subtract)
     else:

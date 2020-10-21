@@ -159,6 +159,8 @@ class Covid1(System):
             susceptible[indicated] = False
             susceptible[recovered] = False
 
-        return locals()
+        ret = locals()
+        del ret['self']
+        return ret
 
 CLASS = Covid1

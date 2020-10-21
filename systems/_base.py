@@ -4,7 +4,8 @@ from collections import OrderedDict
 
 from window.plot import Canvas, Data
 
-from everest.builts._wanderer import Wanderer, StateVar
+from everest.builts._wanderer import Wanderer
+from everest.builts._stateful import Statelet
 from everest.builts._chroner import Chroner
 from everest.builts._observable import Observable, _observation_mode
 from everest.utilities import Grouper
@@ -24,10 +25,10 @@ colourCodes = dict(zip(
     [1. / 18. + i * 1. / 9 for i in range(0, 9)],
     ))
 
-class SystemVar(StateVar):
-    def __init__(self, target, *props):
-        super().__init__(target, *props)
-        self.params = target.inputs
+class SystemVar(Statelet):
+    def __init__(self, var, name, params):
+        super().__init__(var, name)
+        self.params = params
     def _imitate(self, fromVar):
         self.data[...] = swarm_split(
             fromVar.data,
@@ -66,8 +67,6 @@ class System(Observable, Chroner, Wanderer):
     reqAtts.update(configsKeys)
 
     def __init__(self, **kwargs):
-        if not set(self._sortedGhostKeys['configs']) == set(self.configsKeys):
-            raise SystemMissingAsset
         super().__init__(
             **kwargs
             )
@@ -78,8 +77,10 @@ class System(Observable, Chroner, Wanderer):
         del localObj['p']
         self._construct_check(localObj)
         self.locals = localObj
-        for k in self.configs.keys():
-            self.mutables[k] = SystemVar(self, 'locals', k)
+        self._stateVars = [
+            SystemVar(self.locals[k], k, self.inputs)
+                for k in self.configs.keys()
+            ]
         self.observables.clear()
         self.observables.update(self.locals)
         self._fig = self._make_fig()
@@ -89,6 +90,11 @@ class System(Observable, Chroner, Wanderer):
             raise SystemMissingAsset
 
     @_constructed
+    def _state_vars(self):
+        for o in super()._state_vars(): yield o
+        for v in self._stateVars: yield v
+
+    @_constructed
     def _initialise(self):
         super()._initialise()
         self.locals.initialise()
@@ -96,21 +102,16 @@ class System(Observable, Chroner, Wanderer):
     def _iterate(self):
         self.locals.iterate()
         super()._iterate()
-    @_constructed
-    @_voyager_initialise_if_necessary(post = True)
-    def _out(self):
-        outs = super()._out()
-        outs.update(self.evaluate())
-        return outs
-    def _evaluate(self):
-        return OrderedDict((k, v.data.copy()) for k, v in self.mutables.items())
-    @_constructed
-    def _load_process(self, outs):
-        outs = super()._load_process(outs)
-        for k, v in self.mutables.items():
-            v.mutate(outs.pop(k))
+    # @_constructed
+    #
+    #     outs.update(self.evaluate())
+    #     return outs
+    # def _evaluate(self):
+    #     return OrderedDict((k, v.data.copy()) for k, v in self.state.items())
+
+    def _save(self):
+        super()._save()
         self.update()
-        return outs
 
     def update(self):
         self.locals._update()
@@ -119,13 +120,6 @@ class System(Observable, Chroner, Wanderer):
     def _voyager_changed_state_hook(self):
         super()._voyager_changed_state_hook()
         self.update()
-
-    @property
-    def count(self):
-        return self.indices.count
-    @property
-    def chron(self):
-        return self.indices.chron
 
     def _make_fig(self):
         nMarkers = self.locals.nAgents
@@ -196,3 +190,10 @@ class System(Observable, Chroner, Wanderer):
         self._figUpToDate = True
     def show(self):
         return self.fig.fig
+
+    @property
+    def count(self):
+        return self.indices.count
+    @property
+    def chron(self):
+        return self.indices.chron
