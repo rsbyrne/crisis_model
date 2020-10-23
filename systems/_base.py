@@ -7,16 +7,10 @@ from window.plot import Canvas, Data
 from everest.builts._wanderer import Wanderer
 from everest.builts._stateful import Statelet
 from everest.builts._chroner import Chroner
-from everest.builts._observable import Observable, _observation_mode
 from everest.utilities import Grouper
 from everest.builts._voyager import _voyager_initialise_if_necessary
 
 from ..exceptions import *
-
-class SystemException(CrisisModelException):
-    pass
-class SystemMissingAsset(CrisisModelMissingAsset, SystemException):
-    pass
 
 from ..array import swarm_split
 
@@ -47,7 +41,7 @@ def _constructed(func):
         return func(self, *args, **kwargs)
     return wrapper
 
-class System(Observable, Chroner, Wanderer):
+class System(Chroner, Wanderer):
 
     reqAtts = {
         'initialise',
@@ -81,12 +75,13 @@ class System(Observable, Chroner, Wanderer):
             SystemVar(self.locals[k], k, self.inputs)
                 for k in self.configs.keys()
             ]
-        self.observables.clear()
-        self.observables.update(self.locals)
     @classmethod
     def _construct_check(cls, obj):
-        if not all(hasattr(obj, att) for att in cls.reqAtts):
-            raise SystemMissingAsset
+        missing = [att for att in cls.reqAtts if not hasattr(obj, att)]
+        if len(missing):
+            raise MissingAsset(
+                "User must provide the following: " + '; '.join(missing)
+                )
 
     @_constructed
     def _state_vars(self):
@@ -101,12 +96,6 @@ class System(Observable, Chroner, Wanderer):
     def _iterate(self):
         self.locals.iterate()
         super()._iterate()
-    # @_constructed
-    #
-    #     outs.update(self.evaluate())
-    #     return outs
-    # def _evaluate(self):
-    #     return OrderedDict((k, v.data.copy()) for k, v in self.state.items())
 
     def _save(self):
         super()._save()

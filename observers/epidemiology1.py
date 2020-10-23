@@ -1,8 +1,5 @@
-from collections import OrderedDict
-
-import numpy as np
-
-from everest import Function as Fn
+from everest.functions import Fn
+from everest.functions.misc import nonzero
 
 from crisis_model.observers import CrisisObserver
 
@@ -11,18 +8,18 @@ class Epidemiology1(CrisisObserver):
     def __init__(self,
             **kwargs
             ):
-        super().__init__(**kwargs)
+        super().__init__(
+            ['active', 'recovered', 'cumulative'],
+            **kwargs
+            )
 
-    @staticmethod
-    def _construct(o, i):
+    def _user_construct(self, subject):
 
-        active = Fn(Fn(o, 'indicated'), op = (np.nonzero, Fn(None, 0), len))
-        recovered = Fn(Fn(o, 'recovered'), op = (np.nonzero, Fn(None, 0), len))
+        get_data = Fn(subject).get('state', Fn(), 'data')
+        headcount = nonzero.close(get_data)
+
+        active = headcount.close('indicated')
+        recovered = headcount.close('recovered')
         cumulative = active + recovered
 
-        analysers = OrderedDict()
-        analysers['active'] = active
-        analysers['recovered'] = recovered
-        analysers['cumulative'] = cumulative
-
-        return locals()
+        return active, recovered, cumulative

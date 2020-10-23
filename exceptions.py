@@ -1,7 +1,7 @@
-from everest import exceptions
+from everest.exceptions import *
 
-class CrisisModelException(exceptions.EverestException):
+class CrisisModelException(EverestException):
     pass
 
-class CrisisModelMissingAsset(exceptions.MissingAsset, CrisisModelException):
+class MissingAsset(MissingAsset, CrisisModelException):
     pass

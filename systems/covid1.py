@@ -33,11 +33,11 @@ class Covid1(System):
             indicated = False,
             recovered = False,
             timeIndicated = 0.,
+            # MISC (_ghost_)
+            observers = [Epidemiology1,]
             ):
 
         super().__init__()
-
-        self.observerClasses.append(Epidemiology1)
 
     def _construct(self, p):
 
