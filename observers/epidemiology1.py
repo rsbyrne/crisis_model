@@ -1,5 +1,5 @@
-from everest.functions import Fn
-from everest.functions.misc import nonzero
+from everest import functions, Fn
+nonzero = functions.misc.nonzero
 
 from crisis_model.observers import CrisisObserver
 

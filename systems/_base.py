@@ -4,11 +4,11 @@ from collections import OrderedDict
 
 from window.plot import Canvas, Data
 
-from everest.builts._wanderer import Wanderer
-from everest.builts._stateful import Statelet
-from everest.builts._chroner import Chroner
-from everest.utilities import Grouper
-from everest.builts._voyager import _voyager_initialise_if_necessary
+from everest.frames._wanderer import Wanderer
+from everest.frames._stateful import Statelet
+from everest.frames._chroner import Chroner
+from everest.frames._voyager import _voyager_initialise_if_necessary
+from grouper import Grouper
 
 from ..exceptions import *
 
