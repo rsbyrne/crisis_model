@@ -19,7 +19,7 @@ colourCodes = dict(zip(
     [1. / 18. + i * 1. / 9 for i in range(0, 9)],
     ))
 
-class SystemVar(Statelet):
+class SwarmVar(Statelet):
     def __init__(self, var, name, params):
         super().__init__(var, name)
         self.params = params
@@ -32,6 +32,12 @@ class SystemVar(Statelet):
             self.params.popDensity,
             spatialDecimals = self.params.spatialDecimals
             )
+class GlobeVar(Statelet):
+    def __init__(self, var, name, params):
+        super().__init__(var, name)
+        self.params = params
+    def _imitate(self, fromVar):
+        pass
 
 def _constructed(func):
     @wraps(func)
@@ -71,6 +77,13 @@ class System(Chroner, Wanderer):
         del localObj['p']
         self._construct_check(localObj)
         self.locals = localObj
+        for k in self.configs.keys():
+            var = self.locals[k]
+            if isinstance(var, np.ndarray):
+                var = SwarmVar(var, k, self.inputs)
+            else:
+                var =
+
         self._stateVars = [
             SystemVar(self.locals[k], k, self.inputs)
                 for k in self.configs.keys()

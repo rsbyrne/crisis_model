@@ -55,6 +55,7 @@ class Covid1(System):
 
         indicated = np.empty(nAgents, dtype = bool)
         timeIndicated = np.zeros(nAgents, dtype = float)
+        sinceIndicated = np.full(nAgents, -1., dtype = float)
         recovered = np.empty(nAgents, dtype = bool)
         susceptible = np.empty(nAgents, dtype = bool)
 
@@ -126,6 +127,7 @@ class Covid1(System):
             newCases = rng.choice(nonSusceptible, nNew, replace = False)
             indicated[newCases] = True
             susceptible[newCases] = False
+            timeIndicated[...] = 0. - timeIndicated
 
         def iterate():
             rng = self.locals.rng = np.random.default_rng(get_stepSeed())
@@ -139,19 +141,22 @@ class Covid1(System):
                         rng.random(encounters.shape[0]) < p.infectionChance
                         ][:, 1]
                     )
-                indicated[newIndicateds] = True
             else:
                 newIndicateds = []
+            tnow = self.indices.chron.value
+            timeIndicated[newIndicateds] = tnow
+            sinceIndicated[newIndicateds] = 0.
+            sinceIndicated[indicated] = tnow - timeIndicated[indicated]
+            indicated[newIndicateds] = True
             indicateds = indicated.nonzero()[0]
             recovery = rng.normal(
                 p.recoverMean,
                 p.recoverSpread,
                 len(indicateds),
-                ) < timeIndicated[indicated]
+                ) < sinceIndicated[indicated]
             indicated[indicateds] = ~recovery
             recovered[indicateds] = recovery
             susceptible[newIndicateds] = False
-            timeIndicated[indicated] += p.timescale
             self.indices.chron.value += p.timescale
 
         def _update():
