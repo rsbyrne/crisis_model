@@ -55,7 +55,6 @@ class Covid1(System):
 
         indicated = np.empty(nAgents, dtype = bool)
         timeIndicated = np.zeros(nAgents, dtype = float)
-        sinceIndicated = np.full(nAgents, -1., dtype = float)
         recovered = np.empty(nAgents, dtype = bool)
         susceptible = np.empty(nAgents, dtype = bool)
 
@@ -127,12 +126,17 @@ class Covid1(System):
             newCases = rng.choice(nonSusceptible, nNew, replace = False)
             indicated[newCases] = True
             susceptible[newCases] = False
-            timeIndicated[...] = 0. - timeIndicated
+            # timeIndicated[...] = 0. - timeIndicated
 
         def iterate():
-            rng = self.locals.rng = np.random.default_rng(get_stepSeed())
             if not len(indicated.nonzero()[0]):
                 raise EndModel
+            tPrev = self.indices.chron.value
+            self.indices.chron += p.timescale
+            tNow = self.indices.chron.value
+            tDel = tNow - tPrev
+            timeIndicated[~susceptible] += tDel
+            rng = self.locals.rng = np.random.default_rng(get_stepSeed())
             update_coords()
             encounters = get_encounters()
             if len(encounters):
@@ -143,21 +147,16 @@ class Covid1(System):
                     )
             else:
                 newIndicateds = []
-            tnow = self.indices.chron.value
-            timeIndicated[newIndicateds] = tnow
-            sinceIndicated[newIndicateds] = 0.
-            sinceIndicated[indicated] = tnow - timeIndicated[indicated]
             indicated[newIndicateds] = True
             indicateds = indicated.nonzero()[0]
             recovery = rng.normal(
                 p.recoverMean,
                 p.recoverSpread,
                 len(indicateds),
-                ) < sinceIndicated[indicated]
+                ) < timeIndicated[indicated]
             indicated[indicateds] = ~recovery
             recovered[indicateds] = recovery
             susceptible[newIndicateds] = False
-            self.indices.chron.value += p.timescale
 
         def _update():
             susceptible[...] = True

@@ -5,7 +5,7 @@ from collections import OrderedDict
 from window.plot import Canvas, Data
 
 from everest.frames._wanderer import Wanderer
-from everest.frames._stateful import Statelet
+from everest.frames._stateful import StateVar
 from everest.frames._chroner import Chroner
 from everest.frames._voyager import _voyager_initialise_if_necessary
 from grouper import Grouper
@@ -19,25 +19,27 @@ colourCodes = dict(zip(
     [1. / 18. + i * 1. / 9 for i in range(0, 9)],
     ))
 
-class SwarmVar(Statelet):
+class SwarmVar(StateVar):
     def __init__(self, var, name, params):
-        super().__init__(var, name)
+        assert isinstance(var, np.ndarray)
+        super().__init__(var, name = name)
         self.params = params
-    def _imitate(self, fromVar):
-        self.data[...] = swarm_split(
-            fromVar.data,
-            (fromVar.params.corner, self.params.corner),
-            (fromVar.params.aspect, self.params.aspect),
-            (fromVar.params.scale, self.params.scale),
-            self.params.popDensity,
-            spatialDecimals = self.params.spatialDecimals
-            )
-class GlobeVar(Statelet):
+    def _set_value(self, fromVar):
+        if type(fromVar) is type(self):
+            self.data[...] = swarm_split(
+                fromVar.data,
+                (fromVar.params.corner, self.params.corner),
+                (fromVar.params.aspect, self.params.aspect),
+                (fromVar.params.scale, self.params.scale),
+                self.params.popDensity,
+                spatialDecimals = self.params.spatialDecimals
+                )
+        else:
+            super()._set_value(fromVar)
+class GlobeVar(StateVar):
     def __init__(self, var, name, params):
-        super().__init__(var, name)
+        super().__init__(var, name = name)
         self.params = params
-    def _imitate(self, fromVar):
-        pass
 
 def _constructed(func):
     @wraps(func)
@@ -77,17 +79,14 @@ class System(Chroner, Wanderer):
         del localObj['p']
         self._construct_check(localObj)
         self.locals = localObj
+        self._stateVars = list()
         for k in self.configs.keys():
             var = self.locals[k]
             if isinstance(var, np.ndarray):
                 var = SwarmVar(var, k, self.inputs)
             else:
-                var =
-
-        self._stateVars = [
-            SystemVar(self.locals[k], k, self.inputs)
-                for k in self.configs.keys()
-            ]
+                var = GlobeVar(var, k, self.inputs)
+            self._stateVars.append(var)
     @classmethod
     def _construct_check(cls, obj):
         missing = [att for att in cls.reqAtts if not hasattr(obj, att)]
