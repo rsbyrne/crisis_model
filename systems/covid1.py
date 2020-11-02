@@ -159,7 +159,7 @@ class Covid1(System):
                 randomise_coords(rng)
             if not np.all(headings < np.inf):
                 randomise_headings(rng)
-            update_susceptibles()
+            update_statuses()
             if p.initialIndicated:
                 add_mystery_indicateds(rng)
 
@@ -174,13 +174,14 @@ class Covid1(System):
         def stop():
             return not bool(len(indicated.nonzero()[0]))
 
-        def update_susceptibles():
+        def update_statuses():
+            indicated[recovered] = False
             susceptible[...] = True
             susceptible[indicated] = False
             susceptible[recovered] = False
 
         def _update():
-            update_susceptibles()
+            update_statuses()
 
         return locals()
 
