@@ -4,10 +4,10 @@ from collections import OrderedDict
 
 from window.plot import Canvas, Data
 
-from everest.frames._wanderer import Wanderer
+from everest.frames._traversable import Traversable
 from everest.frames._stateful import StateVar
-from everest.frames._chroner import Chroner
-from everest.frames._voyager import _voyager_initialise_if_necessary
+from everest.frames._chronable import Chronable
+from everest.frames._iterable import _iterable_initialise_if_necessary
 from grouper import Grouper
 
 from ..exceptions import *
@@ -44,12 +44,12 @@ class GlobeVar(StateVar):
 def _constructed(func):
     @wraps(func)
     def wrapper(self, *args, **kwargs):
-        if not hasattr(self, 'locals'):
+        if not hasattr(self, '_locals'):
             self.construct()
         return func(self, *args, **kwargs)
     return wrapper
 
-class System(Chroner, Wanderer):
+class System(Chronable, Traversable):
 
     reqAtts = {
         'initialise',
@@ -74,14 +74,24 @@ class System(Chroner, Wanderer):
             )
         self._figUpToDate = False
 
+    @property
+    def locals(self):
+        try:
+            return self._locals
+        except AttributeError:
+            self.construct()
+            return self._locals
     def construct(self):
-        localObj = Grouper(self._construct(p = self.inputs))
+        constructed = self._construct(p = self.inputs)
+        localObj = Grouper(constructed)
         del localObj['p']
+        try: del localObj['self']
+        except KeyError: pass
         self._construct_check(localObj)
-        self.locals = localObj
+        self._locals = localObj
         self._stateVars = list()
         for k in self.configs.keys():
-            var = self.locals[k]
+            var = self._locals[k]
             if isinstance(var, np.ndarray):
                 var = SwarmVar(var, k, self.inputs)
             else:
@@ -103,27 +113,31 @@ class System(Chroner, Wanderer):
     @_constructed
     def _initialise(self):
         super()._initialise()
-        self.locals.initialise()
-    @_voyager_initialise_if_necessary(post = True)
-    def _iterate(self):
-        self.locals.iterate()
-        super()._iterate()
+        self._locals.initialise()
+    def _iterate(self, **kwargs):
+        dt = self._locals.iterate()
+        self.indices['chron'] += dt
+        super()._iterate(**kwargs)
 
     def _save(self):
         super()._save()
         self.update()
 
+    @_constructed
+    def _stop(self):
+        return super()._stop() or self._locals.stop()
+
     def update(self):
-        self.locals._update()
+        self._locals._update()
         self._figUpToDate = False
 
-    def _voyager_changed_state_hook(self):
-        super()._voyager_changed_state_hook()
+    def _iterable_changed_state_hook(self):
+        super()._iterable_changed_state_hook()
         self.update()
 
     def _make_fig(self):
-        xs, ys = self.locals.agentCoords.transpose()
-        nMarkers = self.locals.nAgents
+        xs, ys = self._locals.agentCoords.transpose()
+        nMarkers = self._locals.nAgents
         cs = np.random.rand(nMarkers)
         hypot = max(7, self.inputs.scale)
         aspect = self.inputs.aspect
@@ -135,13 +149,13 @@ class System(Chroner, Wanderer):
         ax.scatter(
             Data(
                 xs,
-                lims = (self.locals.minCoords[0], self.locals.maxCoords[0]),
+                lims = (self._locals.minCoords[0], self._locals.maxCoords[0]),
                 capped = (True, True),
                 label = 'x km',
                 ),
             Data(
                 ys,
-                lims = (self.locals.minCoords[1], self.locals.maxCoords[1]),
+                lims = (self._locals.minCoords[1], self._locals.maxCoords[1]),
                 capped = (True, True),
                 label = 'y km'
                 ),
@@ -154,7 +168,7 @@ class System(Chroner, Wanderer):
         collection.autoscale()
         return canvas
     @property
-    @_voyager_initialise_if_necessary(post = True)
+    @_iterable_initialise_if_necessary(post = True)
     def fig(self):
         if not hasattr(self, '_fig'):
             self._fig = self._make_fig()
@@ -163,12 +177,12 @@ class System(Chroner, Wanderer):
         return self._fig
     def _update_fig(self):
         global colourCodes
-        step = self.indices.count
-        indicated = self.locals.indicated
-        susceptible = self.locals.susceptible
-        recovered = self.locals.recovered
-        coords = self.locals.agentCoords
-        nMarkers = self.locals.nAgents
+        step = self.indices['count']
+        indicated = self._locals.indicated
+        susceptible = self._locals.susceptible
+        recovered = self._locals.recovered
+        coords = self._locals.agentCoords
+        nMarkers = self._locals.nAgents
         figarea = self._fig.size[1] ** 2 * self.inputs.aspect
         cs = np.zeros(nMarkers)
         cs[...] = colourCodes['grey']
@@ -198,7 +212,7 @@ class System(Chroner, Wanderer):
 
     @property
     def count(self):
-        return self.indices.count
+        return self.indices['count']
     @property
     def chron(self):
-        return self.indices.chron
+        return self.indices['chron']

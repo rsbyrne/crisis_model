@@ -15,7 +15,7 @@ class Epidemiology1(CrisisObserver):
 
     def _user_construct(self, subject):
 
-        get_data = Fn(subject).get('state', Fn(), 'data')
+        get_data = Fn(subject, 'state', Fn()).reduce(getattr)
         headcount = nonzero.close(get_data)
 
         active = headcount.close('indicated')

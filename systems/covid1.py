@@ -1,7 +1,5 @@
 import numpy as np
 from functools import partial
-from scipy import spatial
-from collections import OrderedDict
 import warnings
 
 from crisis_model.systems import System
@@ -30,6 +28,7 @@ class Covid1(System):
             seed = 1066, # random seed
             # CONFIGS (_ghost_)
             agentCoords = None,
+            headings = None,
             indicated = False,
             recovered = False,
             timeIndicated = 0.,
@@ -39,7 +38,8 @@ class Covid1(System):
 
         super().__init__()
 
-    def _construct(self, p):
+    @staticmethod
+    def _construct(p):
 
         nAgents = int(p.scale ** 2 * p.aspect * p.popDensity)
         travelLength = p.speed * p.timescale * 24.
@@ -58,8 +58,7 @@ class Covid1(System):
         recovered = np.empty(nAgents, dtype = bool)
         susceptible = np.empty(nAgents, dtype = bool)
 
-        def update_coords():
-            rng = self.locals.rng
+        def iterate_coords(rng):
             distances[...] = rng.random(nAgents) * travelLength
             ang = p.directionChange * p.timescale
             headings[...] += (rng.random(nAgents) - 0.5) * 2. * np.pi * ang
@@ -98,56 +97,23 @@ class Covid1(System):
                 encounters = encounters[:, slice(None, None, -1)]
             return encounters
 
-        def get_stepSeed():
-            stepSeed = int(
-                np.random.default_rng(
-                    int(p.seed + self.count.value)
-                    ).integers(0, int(1e9))
-                )
-            # print(seed, self.count.value, stepSeed, type(stepSeed))
-            return stepSeed
-
-        def initialise():
-            rng = self.locals.rng = np.random.default_rng(get_stepSeed())
-            if not np.all(agentCoords < np.inf):
-                warnings.warn(
-                    "Setting agent coords randomly - did you expect this?"
-                    )
-                agentCoords[...] = \
-                    rng.random((nAgents, 2)) \
-                    * (maxCoords - minCoords) \
-                    + p.corner
-            headings[...] = rng.random(nAgents) * 2. * np.pi
-            susceptible[...] = True
-            susceptible[indicated] = False
-            susceptible[recovered] = False
-            nonSusceptible = susceptible.nonzero()[0]
-            nNew = min(len(nonSusceptible), p.initialIndicated)
-            newCases = rng.choice(nonSusceptible, nNew, replace = False)
-            indicated[newCases] = True
-            susceptible[newCases] = False
-            # timeIndicated[...] = 0. - timeIndicated
-
-        def iterate():
-            if not len(indicated.nonzero()[0]):
-                raise EndModel
-            tPrev = self.indices.chron.value
-            self.indices.chron += p.timescale
-            tNow = self.indices.chron.value
-            tDel = tNow - tPrev
-            timeIndicated[~susceptible] += tDel
-            rng = self.locals.rng = np.random.default_rng(get_stepSeed())
-            update_coords()
+        def get_newIndicateds(rng):
             encounters = get_encounters()
             if len(encounters):
-                newIndicateds = np.unique(
+                return np.unique(
                     encounters[
                         rng.random(encounters.shape[0]) < p.infectionChance
                         ][:, 1]
                     )
             else:
-                newIndicateds = []
+                return []
+
+        def iterate_indicateds(rng):
+            newIndicateds = get_newIndicateds(rng)
             indicated[newIndicateds] = True
+            susceptible[newIndicateds] = False
+
+        def iterate_recovered(rng):
             indicateds = indicated.nonzero()[0]
             recovery = rng.normal(
                 p.recoverMean,
@@ -156,15 +122,66 @@ class Covid1(System):
                 ) < timeIndicated[indicated]
             indicated[indicateds] = ~recovery
             recovered[indicateds] = recovery
-            susceptible[newIndicateds] = False
 
-        def _update():
+        def get_rng(addseed = None):
+            if addseed is None:
+                addseed = int(agentCoords.sum())
+            seed = int(p.seed + addseed)
+            return np.random.default_rng(seed)
+
+        def add_mystery_indicateds(rng):
+            nonSusceptible = susceptible.nonzero()[0]
+            nNew = min(len(nonSusceptible), p.initialIndicated)
+            newCases = rng.choice(nonSusceptible, nNew, replace = False)
+            indicated[newCases] = True
+            susceptible[newCases] = False
+
+        def randomise_coords(rng):
+            warnings.warn(
+                "Setting coords randomly - did you expect this?",
+                stacklevel = 3
+                )
+            agentCoords[...] = \
+                rng.random((nAgents, 2)) \
+                * (maxCoords - minCoords) \
+                + p.corner
+
+        def randomise_headings(rng):
+            warnings.warn(
+                "Setting headings randomly - did you expect this?",
+                stacklevel = 3
+                )
+            headings[...] = rng.random(nAgents) * 2. * np.pi
+
+        def initialise():
+            rng = get_rng(0)
+            if not np.all(agentCoords < np.inf):
+                randomise_coords(rng)
+            if not np.all(headings < np.inf):
+                randomise_headings(rng)
+            update_susceptibles()
+            if p.initialIndicated:
+                add_mystery_indicateds(rng)
+
+        def iterate():
+            rng = get_rng()
+            timeIndicated[~susceptible] += p.timescale
+            iterate_coords(rng)
+            iterate_indicateds(rng)
+            iterate_recovered(rng)
+            return p.timescale
+
+        def stop():
+            return not bool(len(indicated.nonzero()[0]))
+
+        def update_susceptibles():
             susceptible[...] = True
             susceptible[indicated] = False
             susceptible[recovered] = False
 
-        ret = locals()
-        del ret['self']
-        return ret
+        def _update():
+            update_susceptibles()
+
+        return locals()
 
 CLASS = Covid1
