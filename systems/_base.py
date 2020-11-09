@@ -26,6 +26,7 @@ class SwarmVar(StateVar):
         self.params = params
     def _set_value(self, fromVar):
         if type(fromVar) is type(self):
+            assert not fromVar is self
             self.data[...] = swarm_split(
                 fromVar.data,
                 (fromVar.params.corner, self.params.corner),
@@ -68,7 +69,9 @@ class System(Chronable, Traversable):
         )
     reqAtts.update(configsKeys)
 
-    def __init__(self, **kwargs):
+    def __init__(self,
+            **kwargs
+            ):
         super().__init__(
             **kwargs
             )
@@ -205,7 +208,7 @@ class System(Chronable, Traversable):
         collection.set_sizes(
             np.concatenate([ss[~indicated], ss[indicated]])
             )
-        ax.set_title(f'Step: {str(step)}')
+        ax.set_title(f'Step: {step.valstr}')
         self._figUpToDate = True
     def show(self):
         return self.fig.fig

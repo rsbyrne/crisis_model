@@ -12,28 +12,27 @@ class EndModel(Exception):
 class Covid1(System):
 
     def __init__(self,
-            aspect = 1.2, # x length relative to y length
-            scale = 22., # y length in km
-            corner = [0., 0.], # coords of bottom-left corner
-            timescale = 1., # days per timestep
-            popDensity = 508, # people per sq km
-            initialIndicated = 1, # initial mystery cases
-            directionChange = 0.5, # where 1 == 180 deg per day
-            speed = 5, # agent travel speed in km / h
-            infectionChance = 0.1, # chance of transmission by 'contact'
-            recoverMean = 14, # average recovery time in days
-            recoverSpread = 2, # standard deviations of recovery curve
-            contactLength = 1.5, # proximity in metres defining 'contact'
-            spatialDecimals = None, # spatial precision limit
-            seed = 1066, # random seed
-            # CONFIGS (_ghost_)
-            agentCoords = None,
-            headings = None,
-            indicated = False,
-            recovered = False,
-            timeIndicated = 0.,
-            # MISC (_ghost_)
-            observers = [Epidemiology1,]
+            # params
+                aspect = 1.2, # x length relative to y length
+                scale = 22., # y length in km
+                corner = [0., 0.], # coords of bottom-left corner
+                timescale = 1., # days per timestep
+                popDensity = 508, # people per sq km
+                initialIndicated = 1, # initial mystery cases
+                directionChange = 0.5, # where 1 == 180 deg per day
+                speed = 5, # agent travel speed in km / h
+                infectionChance = 0.1, # chance of transmission by 'contact'
+                recoverMean = 14, # average recovery time in days
+                recoverSpread = 2, # standard deviations of recovery curve
+                contactLength = 1.5, # proximity in metres defining 'contact'
+                spatialDecimals = None, # spatial precision limit
+                seed = 1066, # random seed
+            # _configs
+                agentCoords = None,
+                headings = None,
+                indicated = False,
+                recovered = False,
+                timeIndicated = 0.,
             ):
 
         super().__init__()
@@ -48,10 +47,10 @@ class Covid1(System):
             p.corner, p.aspect, p.scale
             )
 
-        agentCoords = np.empty(shape = (nAgents, 2), dtype = float)
+        agentCoords = np.full((nAgents, 2), np.nan, dtype = float)
 
-        headings = np.empty(shape = nAgents, dtype = float)
-        distances = np.empty(shape = nAgents, dtype = float)
+        headings = np.full(nAgents, np.nan, dtype = float)
+        distances = np.full(nAgents, np.nan, dtype = float)
 
         indicated = np.empty(nAgents, dtype = bool)
         timeIndicated = np.zeros(nAgents, dtype = float)
@@ -155,9 +154,9 @@ class Covid1(System):
 
         def initialise():
             rng = get_rng(0)
-            if not np.all(agentCoords < np.inf):
+            if np.isnan(agentCoords).any():
                 randomise_coords(rng)
-            if not np.all(headings < np.inf):
+            if np.isnan(headings).any():
                 randomise_headings(rng)
             update_statuses()
             if p.initialIndicated:

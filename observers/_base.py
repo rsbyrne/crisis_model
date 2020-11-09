@@ -6,8 +6,11 @@ from ..exceptions import *
 
 class CrisisObserver(Observer):
 
-    def __init__(self, keys, **kwargs):
-        self._keys = lambda: keys
+    def __init__(self,
+            obskeys,
+            **kwargs
+            ):
+        self._keys = lambda: obskeys
         super().__init__(**kwargs)
 
     def _construct(self, subject):
